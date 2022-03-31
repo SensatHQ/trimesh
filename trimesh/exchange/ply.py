@@ -371,7 +371,7 @@ def parse_header(file_obj):
 
     Returns
     -----------
-    elements : collections.OrderedDict
+    elements : OrderedDict
       Fields and data types populated
     is_ascii : bool
       Whether the data is ASCII or binary
@@ -388,7 +388,7 @@ def parse_header(file_obj):
 
     # big or little endian
     endian = ['<', '>'][int('big' in encoding)]
-    elements = collections.OrderedDict()
+    elements = util.OrderedDict()
 
     # store file name of TextureFiles in the header
     image_name = None
@@ -409,7 +409,7 @@ def parse_header(file_obj):
             name, length = line[1:]
             elements[name] = {
                 'length': int(length),
-                'properties': collections.OrderedDict()}
+                'properties': util.OrderedDict()}
         # a property is a member of an element
         elif 'property' in line[0]:
             # is the property a simple single value, like:

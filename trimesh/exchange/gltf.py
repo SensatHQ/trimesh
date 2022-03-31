@@ -70,7 +70,8 @@ uint8 = np.dtype("<u1")
 def export_gltf(scene,
                 include_normals=None,
                 merge_buffers=False,
-                tree_postprocessor=None):
+                tree_postprocessor=None,
+                skip_buffer_optimisation=False):
     """
     Export a scene object as a GLTF directory.
 
@@ -103,7 +104,8 @@ def export_gltf(scene,
     # create the header and buffer data
     tree, buffer_items = _create_gltf_structure(
         scene=scene,
-        include_normals=include_normals)
+        include_normals=include_normals,
+        skip_buffer_optimisation=skip_buffer_optimisation)
 
     # allow custom postprocessing
     if tree_postprocessor is not None:
@@ -150,7 +152,8 @@ def export_gltf(scene,
 def export_glb(
         scene,
         include_normals=None,
-        tree_postprocessor=None):
+        tree_postprocessor=None,
+        skip_buffer_optimisation=False):
     """
     Export a scene as a binary GLTF (GLB) file.
 
@@ -179,7 +182,8 @@ def export_glb(
 
     tree, buffer_items = _create_gltf_structure(
         scene=scene,
-        include_normals=include_normals)
+        include_normals=include_normals,
+        skip_buffer_optimisation=skip_buffer_optimisation)
 
     # allow custom postprocessing
     if tree_postprocessor is not None:
@@ -413,7 +417,7 @@ def _buffer_append(ordered, data):
 
     Parameters
     ----------
-    od : collections.OrderedDict
+    od : OrderedDict
       Keyed like { hash : data }
     data : bytes
       To be stored
@@ -434,15 +438,15 @@ def _buffer_append(ordered, data):
     return len(ordered) - 1
 
 
-def _data_append(acc, buff, blob, data):
+def _data_append(acc, buff, blob, data, skip_buffer_optimisation):
     """
     Append a new accessor to an OrderedDict.
 
     Parameters
     ------------
-    acc : collections.OrderedDict
+    acc : OrderedDict
       Collection of accessors, will be mutated in-place
-    buff : collections.OrderedDict
+    buff : OrderedDict
       Collection of buffer bytes, will be mutated in-place
     blob : dict
       Candidate accessor
@@ -462,7 +466,7 @@ def _data_append(acc, buff, blob, data):
         # someone passed a vanilla numpy array
         hashed = fast_hash(data.tobytes())
 
-    if hashed in buff:
+    if skip_buffer_optimisation == False and hashed in buff:
         blob['bufferView'] = list(buff.keys()).index(hashed)
     else:
         # not in buffer items so append and then return index
@@ -548,7 +552,8 @@ def _mesh_to_material(mesh, metallic=0.0, rough=0.0):
 
 def _create_gltf_structure(scene,
                            include_normals=None,
-                           include_metadata=True):
+                           include_metadata=True,
+                           skip_buffer_optimisation=False):
     """
     Generate a GLTF header.
 
@@ -575,7 +580,7 @@ def _create_gltf_structure(scene,
         "scenes": [{"nodes": [0]}],
         "asset": {"version": "2.0",
                   "generator": "https://github.com/mikedh/trimesh"},
-        "accessors": collections.OrderedDict(),
+        "accessors": util.OrderedDict(),
         "meshes": [],
         "images": [],
         "textures": [],
@@ -600,7 +605,7 @@ def _create_gltf_structure(scene,
     # store materials as {hash : index} to avoid duplicates
     mat_hashes = {}
     # store data from geometries
-    buffer_items = collections.OrderedDict()
+    buffer_items = util.OrderedDict()
 
     # map the name of each mesh to the index in tree['meshes']
     mesh_index = {}
@@ -616,21 +621,24 @@ def _create_gltf_structure(scene,
                 tree=tree,
                 buffer_items=buffer_items,
                 include_normals=include_normals,
-                mat_hashes=mat_hashes)
+                mat_hashes=mat_hashes,
+                skip_buffer_optimisation=skip_buffer_optimisation)
         elif util.is_instance_named(geometry, "Path"):
             # add Path2D and Path3D objects
             _append_path(
                 path=geometry,
                 name=name,
                 tree=tree,
-                buffer_items=buffer_items)
+                buffer_items=buffer_items,
+                skip_buffer_optimisation=skip_buffer_optimisation)
         elif util.is_instance_named(geometry, "PointCloud"):
             # add PointCloud objects
             _append_point(
                 points=geometry,
                 name=name,
                 tree=tree,
-                buffer_items=buffer_items)
+                buffer_items=buffer_items,
+                skip_buffer_optimisation=skip_buffer_optimisation)
 
         # only store the index if the append did anything
         if len(tree['meshes']) != previous:
@@ -659,7 +667,8 @@ def _append_mesh(mesh,
                  tree,
                  buffer_items,
                  include_normals,
-                 mat_hashes):
+                 mat_hashes,
+                 skip_buffer_optimisation):
     """
     Append a mesh to the scene structure and put the
     data into buffer_items.
@@ -691,7 +700,8 @@ def _append_mesh(mesh,
                             buff=buffer_items,
                             blob={"componentType": 5125,
                                   "type": "SCALAR"},
-                            data=mesh.faces.astype(uint32))
+                            data=mesh.faces.astype(uint32),
+                            skip_buffer_optimisation=skip_buffer_optimisation)
 
     # vertices: 5126 is a float32
     # create or reuse an accessor for these vertices
@@ -700,7 +710,8 @@ def _append_mesh(mesh,
                               blob={"componentType": 5126,
                                     "type": "VEC3",
                                     "byteOffset": 0},
-                              data=mesh.vertices.astype(float32))
+                              data=mesh.vertices.astype(float32),
+                              skip_buffer_optimisation=skip_buffer_optimisation)
 
     # meshes reference accessor indexes
     current = {"name": name,
@@ -742,7 +753,8 @@ def _append_mesh(mesh,
                   "normalized": True,
                   "type": "VEC4",
                   "byteOffset": 0},
-            data=vertex_colors.astype(uint8))
+            data=vertex_colors.astype(uint8),
+            skip_buffer_optimisation=skip_buffer_optimisation)
 
         # add the reference for vertex color
         current["primitives"][0]["attributes"][
@@ -771,7 +783,8 @@ def _append_mesh(mesh,
                                   blob={"componentType": 5126,
                                         "type": "VEC2",
                                         "byteOffset": 0},
-                                  data=uv.astype(float32))
+                                  data=uv.astype(float32),
+                                  skip_buffer_optimisation=skip_buffer_optimisation)
             # add the reference for UV coordinates
             current["primitives"][0]["attributes"][
                 "TEXCOORD_0"] = acc_uv
@@ -787,7 +800,8 @@ def _append_mesh(mesh,
                   "count": len(mesh.vertices),
                   "type": "VEC3",
                   "byteOffset": 0},
-            data=mesh.vertex_normals.astype(float32))
+            data=mesh.vertex_normals.astype(float32),
+            skip_buffer_optimisation=skip_buffer_optimisation)
         # add the reference for vertex color
         current["primitives"][0]["attributes"][
             "NORMAL"] = acc_norm
@@ -803,7 +817,8 @@ def _append_mesh(mesh,
         acc_atr = _data_append(acc=tree['accessors'],
                                buff=buffer_items,
                                blob=_build_accessor(attrib),
-                               data=attrib)
+                               data=attrib,
+                               skip_buffer_optimisation=skip_buffer_optimisation)
         current["primitives"][0]["attributes"][attribute_name] = acc_atr
 
     tree["meshes"].append(current)
@@ -816,7 +831,7 @@ def _build_views(buffer_items):
 
     Parameters
     --------------
-    buffer_items : collections.OrderedDict
+    buffer_items : OrderedDict
       Buffers to build views for
 
     Returns
@@ -917,7 +932,7 @@ def _byte_pad(data, bound=4):
     return data
 
 
-def _append_path(path, name, tree, buffer_items):
+def _append_path(path, name, tree, buffer_items,  skip_buffer_optimisation):
     """
     Append a 2D or 3D path to the scene structure and put the
     data into buffer_items.
@@ -958,7 +973,8 @@ def _append_path(path, name, tree, buffer_items):
         blob={"componentType": 5126,
               "type": "VEC3",
               "byteOffset": 0},
-        data=vxlist[4][1].astype(float32))
+        data=vxlist[4][1].astype(float32),
+        skip_buffer_optimisation=skip_buffer_optimisation)
 
     current = {
         "name": name,
@@ -982,14 +998,15 @@ def _append_path(path, name, tree, buffer_items):
                                        "normalized": True,
                                        "type": "VEC4",
                                        "byteOffset": 0},
-                                 data=np.array(vxlist[5][1]).astype(uint8))
+                                 data=np.array(vxlist[5][1]).astype(uint8),
+                                 skip_buffer_optimisation=skip_buffer_optimisation)
         # add color to attributes
         current["primitives"][0]["attributes"]["COLOR_0"] = acc_color
 
     tree["meshes"].append(current)
 
 
-def _append_point(points, name, tree, buffer_items):
+def _append_point(points, name, tree, buffer_items, skip_buffer_optimisation):
     """
     Append a 2D or 3D pointCloud to the scene structure and
     put the data into buffer_items.
@@ -1018,7 +1035,8 @@ def _append_point(points, name, tree, buffer_items):
                               blob={"componentType": 5126,
                                     "type": "VEC3",
                                     "byteOffset": 0},
-                              data=vxlist[4][1].astype(float32))
+                              data=vxlist[4][1].astype(float32),
+                              skip_buffer_optimisation=skip_buffer_optimisation)
     current = {"name": name,
                "primitives": [{
                    "attributes": {"POSITION": acc_vertex},
@@ -1045,7 +1063,8 @@ def _append_point(points, name, tree, buffer_items):
                                        "normalized": True,
                                        "type": kind,
                                        "byteOffset": 0},
-                                 data=np.array(color_data).astype(uint8))
+                                 data=np.array(color_data).astype(uint8),
+                                 skip_buffer_optimisation=skip_buffer_optimisation)
         # add color to attributes
         current["primitives"][0]["attributes"]["COLOR_0"] = acc_color
     tree["meshes"].append(current)
@@ -1258,7 +1277,7 @@ def _read_buffers(header,
 
     mesh_prim = collections.defaultdict(list)
     # load data from accessors into Trimesh objects
-    meshes = collections.OrderedDict()
+    meshes = util.OrderedDict()
 
     names_original = collections.defaultdict(list)
 
@@ -1387,7 +1406,7 @@ def _read_buffers(header,
     if merge_primitives:
         # if we are only returning one Trimesh object
         # replace `mesh_prim` with updated values
-        mesh_prim_replace = dict()
+        mesh_prim_replace = util.OrderedDict()
         mesh_pop = []
         for mesh_index, names in mesh_prim.items():
             if len(names) <= 1:
