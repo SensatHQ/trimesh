@@ -71,7 +71,7 @@ def export_gltf(scene,
                 include_normals=None,
                 merge_buffers=False,
                 tree_postprocessor=None,
-                skip_buffer_optimisation=False):
+                reduce_buffer_size=True):
     """
     Export a scene object as a GLTF directory.
 
@@ -105,7 +105,7 @@ def export_gltf(scene,
     tree, buffer_items = _create_gltf_structure(
         scene=scene,
         include_normals=include_normals,
-        skip_buffer_optimisation=skip_buffer_optimisation)
+        reduce_buffer_size=reduce_buffer_size)
 
     # allow custom postprocessing
     if tree_postprocessor is not None:
@@ -153,7 +153,7 @@ def export_glb(
         scene,
         include_normals=None,
         tree_postprocessor=None,
-        skip_buffer_optimisation=False):
+        reduce_buffer_size=True):
     """
     Export a scene as a binary GLTF (GLB) file.
 
@@ -183,7 +183,7 @@ def export_glb(
     tree, buffer_items = _create_gltf_structure(
         scene=scene,
         include_normals=include_normals,
-        skip_buffer_optimisation=skip_buffer_optimisation)
+        reduce_buffer_size=reduce_buffer_size)
 
     # allow custom postprocessing
     if tree_postprocessor is not None:
@@ -438,7 +438,7 @@ def _buffer_append(ordered, data):
     return len(ordered) - 1
 
 
-def _data_append(acc, buff, blob, data, skip_buffer_optimisation):
+def _data_append(acc, buff, blob, data, reduce_buffer_size):
     """
     Append a new accessor to an OrderedDict.
 
@@ -458,15 +458,17 @@ def _data_append(acc, buff, blob, data, skip_buffer_optimisation):
     index : int
       Index of accessor that was added or reused.
     """
+    if not reduce_buffer_size:
+        hashed = len(buff)
     # if we have data include that in the key
-    if hasattr(data, 'fast_hash'):
+    elif hasattr(data, 'fast_hash'):
         # passed a TrackedArray object
         hashed = data.fast_hash()
     else:
         # someone passed a vanilla numpy array
         hashed = fast_hash(data.tobytes())
 
-    if skip_buffer_optimisation == False and hashed in buff:
+    if reduce_buffer_size and hashed in buff:
         blob['bufferView'] = list(buff.keys()).index(hashed)
     else:
         # not in buffer items so append and then return index
@@ -553,7 +555,7 @@ def _mesh_to_material(mesh, metallic=0.0, rough=0.0):
 def _create_gltf_structure(scene,
                            include_normals=None,
                            include_metadata=True,
-                           skip_buffer_optimisation=False):
+                           reduce_buffer_size=True):
     """
     Generate a GLTF header.
 
@@ -622,7 +624,7 @@ def _create_gltf_structure(scene,
                 buffer_items=buffer_items,
                 include_normals=include_normals,
                 mat_hashes=mat_hashes,
-                skip_buffer_optimisation=skip_buffer_optimisation)
+                reduce_buffer_size=reduce_buffer_size)
         elif util.is_instance_named(geometry, "Path"):
             # add Path2D and Path3D objects
             _append_path(
@@ -630,7 +632,7 @@ def _create_gltf_structure(scene,
                 name=name,
                 tree=tree,
                 buffer_items=buffer_items,
-                skip_buffer_optimisation=skip_buffer_optimisation)
+                reduce_buffer_size=reduce_buffer_size)
         elif util.is_instance_named(geometry, "PointCloud"):
             # add PointCloud objects
             _append_point(
@@ -638,7 +640,7 @@ def _create_gltf_structure(scene,
                 name=name,
                 tree=tree,
                 buffer_items=buffer_items,
-                skip_buffer_optimisation=skip_buffer_optimisation)
+                reduce_buffer_size=reduce_buffer_size)
 
         # only store the index if the append did anything
         if len(tree['meshes']) != previous:
@@ -668,7 +670,7 @@ def _append_mesh(mesh,
                  buffer_items,
                  include_normals,
                  mat_hashes,
-                 skip_buffer_optimisation):
+                 reduce_buffer_size):
     """
     Append a mesh to the scene structure and put the
     data into buffer_items.
@@ -701,7 +703,7 @@ def _append_mesh(mesh,
                             blob={"componentType": 5125,
                                   "type": "SCALAR"},
                             data=mesh.faces.astype(uint32),
-                            skip_buffer_optimisation=skip_buffer_optimisation)
+                            reduce_buffer_size=reduce_buffer_size)
 
     # vertices: 5126 is a float32
     # create or reuse an accessor for these vertices
@@ -711,7 +713,7 @@ def _append_mesh(mesh,
                                     "type": "VEC3",
                                     "byteOffset": 0},
                               data=mesh.vertices.astype(float32),
-                              skip_buffer_optimisation=skip_buffer_optimisation)
+                              reduce_buffer_size=reduce_buffer_size)
 
     # meshes reference accessor indexes
     current = {"name": name,
@@ -754,7 +756,7 @@ def _append_mesh(mesh,
                   "type": "VEC4",
                   "byteOffset": 0},
             data=vertex_colors.astype(uint8),
-            skip_buffer_optimisation=skip_buffer_optimisation)
+            reduce_buffer_size=reduce_buffer_size)
 
         # add the reference for vertex color
         current["primitives"][0]["attributes"][
@@ -784,7 +786,7 @@ def _append_mesh(mesh,
                                         "type": "VEC2",
                                         "byteOffset": 0},
                                   data=uv.astype(float32),
-                                  skip_buffer_optimisation=skip_buffer_optimisation)
+                                  reduce_buffer_size=reduce_buffer_size)
             # add the reference for UV coordinates
             current["primitives"][0]["attributes"][
                 "TEXCOORD_0"] = acc_uv
@@ -801,7 +803,7 @@ def _append_mesh(mesh,
                   "type": "VEC3",
                   "byteOffset": 0},
             data=mesh.vertex_normals.astype(float32),
-            skip_buffer_optimisation=skip_buffer_optimisation)
+            reduce_buffer_size=reduce_buffer_size)
         # add the reference for vertex color
         current["primitives"][0]["attributes"][
             "NORMAL"] = acc_norm
@@ -818,7 +820,7 @@ def _append_mesh(mesh,
                                buff=buffer_items,
                                blob=_build_accessor(attrib),
                                data=attrib,
-                               skip_buffer_optimisation=skip_buffer_optimisation)
+                               reduce_buffer_size=reduce_buffer_size)
         current["primitives"][0]["attributes"][attribute_name] = acc_atr
 
     tree["meshes"].append(current)
@@ -932,7 +934,7 @@ def _byte_pad(data, bound=4):
     return data
 
 
-def _append_path(path, name, tree, buffer_items,  skip_buffer_optimisation):
+def _append_path(path, name, tree, buffer_items, reduce_buffer_size):
     """
     Append a 2D or 3D path to the scene structure and put the
     data into buffer_items.
@@ -974,7 +976,7 @@ def _append_path(path, name, tree, buffer_items,  skip_buffer_optimisation):
               "type": "VEC3",
               "byteOffset": 0},
         data=vxlist[4][1].astype(float32),
-        skip_buffer_optimisation=skip_buffer_optimisation)
+        reduce_buffer_size=reduce_buffer_size)
 
     current = {
         "name": name,
@@ -999,14 +1001,14 @@ def _append_path(path, name, tree, buffer_items,  skip_buffer_optimisation):
                                        "type": "VEC4",
                                        "byteOffset": 0},
                                  data=np.array(vxlist[5][1]).astype(uint8),
-                                 skip_buffer_optimisation=skip_buffer_optimisation)
+                                 reduce_buffer_size=reduce_buffer_size)
         # add color to attributes
         current["primitives"][0]["attributes"]["COLOR_0"] = acc_color
 
     tree["meshes"].append(current)
 
 
-def _append_point(points, name, tree, buffer_items, skip_buffer_optimisation):
+def _append_point(points, name, tree, buffer_items, reduce_buffer_size):
     """
     Append a 2D or 3D pointCloud to the scene structure and
     put the data into buffer_items.
@@ -1036,7 +1038,7 @@ def _append_point(points, name, tree, buffer_items, skip_buffer_optimisation):
                                     "type": "VEC3",
                                     "byteOffset": 0},
                               data=vxlist[4][1].astype(float32),
-                              skip_buffer_optimisation=skip_buffer_optimisation)
+                              reduce_buffer_size=reduce_buffer_size)
     current = {"name": name,
                "primitives": [{
                    "attributes": {"POSITION": acc_vertex},
@@ -1064,7 +1066,7 @@ def _append_point(points, name, tree, buffer_items, skip_buffer_optimisation):
                                        "type": kind,
                                        "byteOffset": 0},
                                  data=np.array(color_data).astype(uint8),
-                                 skip_buffer_optimisation=skip_buffer_optimisation)
+                                 reduce_buffer_size=reduce_buffer_size)
         # add color to attributes
         current["primitives"][0]["attributes"]["COLOR_0"] = acc_color
     tree["meshes"].append(current)
