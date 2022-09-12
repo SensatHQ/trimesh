@@ -2411,3 +2411,17 @@ def is_ccw(points):
     ccw = area < 0
 
     return ccw
+
+def OrderedDict(*args, **kwargs):
+    """
+    Return dict() for python 3.7+
+    
+    As of python 3.7 the standard dict implementation is ordered.
+    
+    Using dict over collections.OrderedDict in these situation 
+    provides a considerable performance boost
+
+    """
+    if sys.version_info >= (3, 7):
+        return dict(*args, **kwargs)
+    return collections.OrderedDict(*args, **kwargs)

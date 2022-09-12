@@ -506,6 +506,9 @@ class EnforcedForest(object):
         # if multiple calls are made for the same path
         # but the connectivity hasn't changed return cached
         self._cache = {}
+        
+        # Set of hashable node keys for quick lookups
+        self.node_names = set()
 
     def add_edge(self, u, v, **kwargs):
         """
@@ -551,6 +554,7 @@ class EnforcedForest(object):
         else:
             self.node_data[v].update({})
 
+        self.node_names.add(u)
         return True
 
     def remove_node(self, u):
@@ -589,6 +593,7 @@ class EnforcedForest(object):
 
         # delete node data
         del self.node_data[u]
+        self.node_names.remove(u)
 
         return True
 
@@ -655,7 +660,7 @@ class EnforcedForest(object):
         nodes : set
           Every node currently stored.
         """
-        return self.node_data.keys()
+        return self.node_names
 
     @property
     def children(self):

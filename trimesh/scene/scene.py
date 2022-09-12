@@ -57,7 +57,7 @@ class Scene(Geometry3D):
           Camera transform in the base frame
         """
         # mesh name : Trimesh object
-        self.geometry = collections.OrderedDict()
+        self.geometry = util.OrderedDict()
 
         # create a new graph
         self.graph = SceneGraph(base_frame=base_frame)
