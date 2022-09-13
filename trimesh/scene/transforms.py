@@ -506,7 +506,7 @@ class EnforcedForest(object):
         # if multiple calls are made for the same path
         # but the connectivity hasn't changed return cached
         self._cache = {}
-        
+
         # Set of hashable node keys for quick lookups
         self.node_names = set()
 

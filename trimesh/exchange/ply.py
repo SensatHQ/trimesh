@@ -4,7 +4,6 @@ from string import Template
 
 import tempfile
 import subprocess
-import collections
 
 from .. import util
 from .. import visual
